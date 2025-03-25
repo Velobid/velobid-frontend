@@ -1,12 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Plus } from "lucide-react"
 import Image from "next/image"
 
 import { Button } from "@heroui/button"
 import { Card, CardHeader, CardBody, CardFooter } from "@heroui/card"
 import { Tabs, Tab } from "@heroui/tabs"
+import CreateAuctionModal from "@/components/create-auction-modal"
 
 export default function Dashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("dark")
@@ -34,10 +34,7 @@ export default function Dashboard() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center">
               <h1 className="text-2xl font-bold tracking-tight">Auction Dashboard</h1>
               <div className="ml-auto"></div>
-              <Button className="mt-4 md:mt-0">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Auction
-              </Button>
+              <CreateAuctionModal/>
             </div>
 
             {/* Overview Cards */}
