@@ -1,12 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
+import { ethers, formatEther } from "ethers"
 
 import { Button } from "@heroui/button"
 import { Card, CardHeader, CardBody, CardFooter } from "@heroui/card"
 import { Tabs, Tab } from "@heroui/tabs"
 import CreateAuctionModal from "@/components/create-auction-modal"
+import { getContract, getProvider } from "@/contract/contract"
+import abi from "@/contract/abi";
 
 export default function Dashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("dark")
@@ -22,6 +25,59 @@ export default function Dashboard() {
     document.documentElement.classList.add("dark")
   })
 
+  const [overview, setOverview] = useState({
+    activeAuctions: 0,
+    upcoming: 0,
+    totalBids: 0,
+    avgBid: "0 ETH",
+  })
+
+  const fetchOverview = async () => {
+    try {
+      // const auctions: string[] = await contract.getAuctions(0, 100) // array of address
+      const contract = await getContract();
+      console.log("Contract address (via getAddress):", await contract.getAddress());
+      console.log("ABI includes getAuctions:", !!contract.interface.getFunction("getAuctions"));
+
+      const auctions = await contract.getAuctions(0, 100)
+      console.log("Auctions:", auctions)
+
+      let active = 0
+      let upcoming = 0
+      let totalBids = 0
+      let totalValue = 0n // native bigint
+
+      for (const address of auctions) {
+        const auction = new ethers.Contract(address, abi, await getProvider())
+        const status = await auction.status()
+        const bids = await auction.getBids() // assumed array of { amount: bigint }
+
+        totalBids += bids.length
+
+        const bidSum = bids.reduce((acc: bigint, b: { amount: bigint }) => acc + b.amount, 0n)
+        totalValue += bidSum
+
+        if (status === 0) active++
+        else if (status === 1) upcoming++
+      }
+
+      const avgBid = totalBids > 0 ? formatEther(totalValue / BigInt(totalBids)) : "0"
+
+      setOverview({
+        activeAuctions: active,
+        upcoming,
+        totalBids,
+        avgBid: `${avgBid} ETH`,
+      })
+    } catch (err) {
+      console.error("Fetch Overview Error:", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchOverview()
+  }, [])
+
   return (
     <div className={`min-h-screen w-full bg-background`}>
       <div className="grid min-h-screen w-full">
@@ -34,7 +90,7 @@ export default function Dashboard() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center">
               <h1 className="text-2xl font-bold tracking-tight">Auction Dashboard</h1>
               <div className="ml-auto"></div>
-              <CreateAuctionModal/>
+              <CreateAuctionModal />
             </div>
 
             {/* Overview Cards */}
@@ -51,19 +107,19 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-sm text-foreground-500">Active Auctions</p>
-                      <p className="text-2xl font-bold">24</p>
+                      <p className="text-2xl font-bold">{overview.activeAuctions}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm text-foreground-500">Upcoming</p>
-                      <p className="text-2xl font-bold">12</p>
+                      <p className="text-2xl font-bold">{overview.upcoming}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm text-foreground-500">Total Bids</p>
-                      <p className="text-2xl font-bold">1,248</p>
+                      <p className="text-2xl font-bold">{overview.totalBids}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm text-foreground-500">Avg. Bid Value</p>
-                      <p className="text-2xl font-bold">2.4 ETH</p>
+                      <p className="text-2xl font-bold">{overview.avgBid}</p>
                     </div>
                   </div>
                 </CardBody>
@@ -268,6 +324,17 @@ function CollectionCard({
   featured = false,
   upcoming = false,
 }: CollectionCardProps) {
+
+  const placeBid = async () => {
+    try {
+      const contract = new ethers.Contract("AUCTION_ADDRESS", abi, await getProvider())
+      const tx = await contract.placeBid({ value: ethers.parseEther("1") })
+      await tx.wait()
+      alert("Bid placed!")
+    } catch (err) {
+      console.error(err)
+    }
+  }
   return (
     <Card className={`overflow-hidden transition-all hover:shadow-lg ${featured ? "border-primary" : ""}`}>
       <div className="relative">
@@ -302,7 +369,7 @@ function CollectionCard({
             <p>{creator}</p>
             <p>{bidCount} bids</p>
           </div>
-          <Button variant="bordered" className="w-full">
+          <Button variant="bordered" className="w-full" onPress={placeBid}>
             {upcoming ? "Remind Me" : "Place Bid"}
           </Button>
         </div>

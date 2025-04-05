@@ -1,3 +1,11 @@
+"use client";
+
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 import {
   Navbar as HeroUINavbar,
   NavbarContent,
@@ -7,16 +15,21 @@ import {
   NavbarItem,
   NavbarMenuItem,
 } from "@heroui/navbar";
+import {
+  Dropdown,
+  DropdownTrigger,
+  DropdownItem,
+  DropdownMenu,
+} from "@heroui/dropdown";
 import { Button } from "@heroui/button";
 import { Kbd } from "@heroui/kbd";
 import { Link } from "@heroui/link";
 import { Input } from "@heroui/input";
 import { link as linkStyles } from "@heroui/theme";
+import React from "react";
 import NextLink from "next/link";
 import clsx from "clsx";
 import Image from "next/image";
-
-import { WalletComponents } from "./wallet";
 
 import { siteConfig } from "@/config/site";
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -24,11 +37,78 @@ import {
   TwitterIcon,
   GithubIcon,
   DiscordIcon,
-  HeartFilledIcon,
   SearchIcon,
 } from "@/components/icons";
 
+
 export const Navbar = () => {
+  const [account, setAccount] = React.useState<string | null>(null);
+
+  const connectWallet = async () => {
+    try {
+      if (typeof window === "undefined" || !window.ethereum) {
+        alert("MetaMask is not installed.");
+
+        return;
+      }
+
+      const accounts: string[] = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+
+      if (accounts.length > 0) {
+        setAccount(accounts[0]);
+        const chainId = await window.ethereum.request({ method: "eth_chainId" });
+
+        console.log("Connected to chain:", chainId);
+      } else {
+        console.warn("No accounts found.");
+      }
+    } catch (error) {
+      console.error("Wallet connection error:", error);
+      alert("Failed to connect wallet. Check console for details.");
+    }
+  };
+
+  React.useEffect(() => {
+    const checkConnection = async () => {
+      if (typeof window !== "undefined" && window.ethereum) {
+        try {
+          const accounts: string[] = await window.ethereum.request({
+            method: "eth_accounts", // Gets connected accounts without asking permission
+          });
+
+          if (accounts.length > 0) {
+            setAccount(accounts[0]);
+          }
+        } catch (err) {
+          console.error("Failed to check wallet connection:", err);
+        }
+      }
+    };
+
+    checkConnection();
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && window.ethereum) {
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length === 0) {
+          // User disconnected
+          setAccount(null);
+        } else {
+          setAccount(accounts[0]);
+        }
+      };
+
+      window.ethereum.on("accountsChanged", handleAccountsChanged);
+
+      return () => {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      };
+    }
+  }, []);
+
   const searchInput = (
     <Input
       aria-label="Search"
@@ -111,7 +191,24 @@ export const Navbar = () => {
           >
             Sponsor
           </Button> */}
-          <Button color="primary">Connect Wallet</Button>
+          {account ? (
+            <Dropdown>
+              <DropdownTrigger>
+                <Button color="primary" variant="flat">
+                  {`${account.slice(0, 6)}...${account.slice(-4)}`}
+                </Button>
+              </DropdownTrigger>
+              <DropdownMenu aria-label="Wallet options">
+                <DropdownItem key="disconnect" color="danger" onClick={() => setAccount(null)}>
+                  Disconnect
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
+          ) : (
+            <Button onPress={connectWallet} color="primary">
+              Connect Wallet
+            </Button>
+          )}
           {/* <WalletComponents /> */}
         </NavbarItem>
       </NavbarContent>
