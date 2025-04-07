@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import { ethers, formatEther } from "ethers"
+import { ethers, formatEther, parseEther } from "ethers"
 
 import { Button } from "@heroui/button"
 import { Card, CardHeader, CardBody, CardFooter } from "@heroui/card"
@@ -10,6 +10,31 @@ import { Tabs, Tab } from "@heroui/tabs"
 import CreateAuctionModal from "@/components/create-auction-modal"
 import { getContract, getProvider } from "@/contract/contract"
 import abi from "@/contract/abi";
+import toast from "react-hot-toast"
+
+type Auction = {
+  auctionId: string;
+  auctionName: string;
+  auctionDescription: string;
+  auctionEndTime: string;
+  startingBid: string;
+  highestBid: string;
+  highestBidder: string;
+  ended: boolean;
+  winner: string;
+  totalVolumeBid: string;
+  beneficiary: string;
+};
+
+function getTimeLeft(endTime: string | number) {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = Number(endTime) - now;
+  if (diff <= 0) return "Ended";
+
+  const hours = Math.floor(diff / 3600);
+  const minutes = Math.floor((diff % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
 
 export default function Dashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("dark")
@@ -30,52 +55,89 @@ export default function Dashboard() {
     upcoming: 0,
     totalBids: 0,
     avgBid: "0 ETH",
+    auction: 0,
   })
 
-  const fetchOverview = async () => {
+  const fetchPlatformData = async () => {
+    const contract = await getContract();
     try {
-      // const auctions: string[] = await contract.getAuctions(0, 100) // array of address
-      const contract = await getContract();
-      console.log("Contract address (via getAddress):", await contract.getAddress());
-      console.log("ABI includes getAuctions:", !!contract.interface.getFunction("getAuctions"));
+      const result = await contract.data();
 
-      const auctions = await contract.getAuctions(0, 100)
-      console.log("Auctions:", auctions)
+      const platformStats = {
+        totalAuction: result.totalAuction.toString(),
+        totalActiveAuction: result.totalActiveAuction.toString(),
+        totalBidders: result.totalBidders.toString(),
+        totalBid: result.totalBid.toString(),
+        totalVolumeBid: result.totalVolumeBid.toString(),
+        highestBid: result.highestBid.toString(),
+        highestBidder: result.highestBidder,
+        averageBidValue: result.averageBidValue.toString(),
+        totalUsers: result.totalUsers.toString(),
+      };
 
-      let active = 0
-      let upcoming = 0
-      let totalBids = 0
-      let totalValue = 0n // native bigint
-
-      for (const address of auctions) {
-        const auction = new ethers.Contract(address, abi, await getProvider())
-        const status = await auction.status()
-        const bids = await auction.getBids() // assumed array of { amount: bigint }
-
-        totalBids += bids.length
-
-        const bidSum = bids.reduce((acc: bigint, b: { amount: bigint }) => acc + b.amount, 0n)
-        totalValue += bidSum
-
-        if (status === 0) active++
-        else if (status === 1) upcoming++
-      }
-
-      const avgBid = totalBids > 0 ? formatEther(totalValue / BigInt(totalBids)) : "0"
-
+      // 🟢 Update overview state based on the platformStats
       setOverview({
-        activeAuctions: active,
-        upcoming,
-        totalBids,
-        avgBid: `${avgBid} ETH`,
-      })
-    } catch (err) {
-      console.error("Fetch Overview Error:", err)
+        activeAuctions: Number(platformStats.totalActiveAuction),
+        upcoming: Number(platformStats.totalAuction) - Number(platformStats.totalActiveAuction),
+        totalBids: Number(platformStats.totalBid),
+        avgBid: `${formatEther(platformStats.averageBidValue)} ETH`,
+        auction: Number(platformStats.totalAuction),
+      });
+
+      return platformStats;
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlatformData()
+  }, [])
+
+  const [auctions, setAuctions] = useState<Auction[]>([])
+
+  const fetchAuctions = async () => {
+    if (overview.auction > 0) {
+      try {
+        const contract = await getContract()
+        const startIndex = 0
+        const limit = 10
+
+        const auctionIds = await contract.getAuctions(startIndex, limit)
+
+        const auctionDetails = await Promise.all(
+          auctionIds.map(async (id: any) => {
+            const auction = await contract.auctions(id)
+
+            return {
+              auctionId: auction.auctionId.toString(),
+              auctionName: auction.auctionName,
+              auctionDescription: auction.auctionDescription,
+              auctionEndTime: auction.auctionEndTime.toString(),
+              startingBid: formatEther(auction.startingBid),
+              highestBid: formatEther(auction.highestBid),
+              highestBidder: auction.highestBidder,
+              ended: auction.ended,
+              winner: auction.winner,
+              totalVolumeBid: formatEther(auction.totalVolumeBid),
+              beneficiary: auction.beneficiary,
+            }
+          })
+        )
+
+        setAuctions(auctionDetails)
+      } catch (err) {
+        console.error("Error fetching auctions:", err)
+      }
+    }
+    else {
+      console.log("No auctions yet.");
     }
   }
 
   useEffect(() => {
-    fetchOverview()
+    fetchAuctions()
+    console.log(auctions);
   }, [])
 
   return (
@@ -165,132 +227,69 @@ export default function Dashboard() {
               <Tabs aria-label="Options">
                 <Tab key="all" title="All">
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {/* Collection Card 1 */}
-                    <CollectionCard
-                      image="/CosmicVoyagers.jpg?height=400&width=400"
-                      name="Cosmic Voyagers"
-                      creator="@cosmic_artist"
-                      price="4.5 ETH"
-                      timeLeft="6h 24m"
-                      bidCount={18}
-                    />
-
-                    {/* Collection Card 2 */}
-                    <CollectionCard
-                      image="/DigitalDreamscape.jpg?height=400&width=400"
-                      name="Digital Dreamscape"
-                      creator="@dream_creator"
-                      price="2.8 ETH"
-                      timeLeft="12h 10m"
-                      bidCount={24}
-                      featured={true}
-                    />
-
-                    {/* Collection Card 3 */}
-                    <CollectionCard
-                      image="/AbstractRealms.jpg?height=400&width=400"
-                      name="Abstract Realms"
-                      creator="@abstract_mind"
-                      price="3.2 ETH"
-                      timeLeft="2h 45m"
-                      bidCount={15}
-                    />
-
-                    {/* Collection Card 4 */}
-                    <CollectionCard
-                      image="/NeonGenesis.jpg?height=400&width=400"
-                      name="Neon Genesis"
-                      creator="@neon_artist"
-                      price="5.6 ETH"
-                      timeLeft="4h 30m"
-                      bidCount={32}
-                    />
-
-                    {/* Collection Card 5 */}
-                    <CollectionCard
-                      image="/PixelPunks.jpg?height=400&width=400"
-                      name="Pixel Punks"
-                      creator="@pixel_master"
-                      price="1.8 ETH"
-                      timeLeft="8h 15m"
-                      bidCount={12}
-                    />
-
-                    {/* Collection Card 6 */}
-                    <CollectionCard
-                      image="/EtherealEchoes.jpg?height=400&width=400"
-                      name="Ethereal Echoes"
-                      creator="@ethereal_creator"
-                      price="3.9 ETH"
-                      timeLeft="5h 50m"
-                      bidCount={27}
-                    />
+                    {auctions.length > 0 ? (
+                      auctions.map((auction, index) => (
+                        <CollectionCard
+                          key={auction.auctionId.toString() + index}
+                          image="/NeonGenesis.jpg?height=400&width=400"
+                          name={auction.auctionName}
+                          creator={auction.beneficiary}
+                          price={`${formatEther(auction.highestBid)} ETH`}
+                          timeLeft={getTimeLeft(auction.auctionEndTime)}
+                          bidCount={Number(auction.totalVolumeBid)}
+                          id={auction.auctionId}
+                        />
+                      ))
+                    ) : (
+                      <p className="col-span-full text-center text-gray-500">No auctions available.</p>
+                    )}
                   </div>
                 </Tab>
                 <Tab key="active" title="Active">
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {/* Active Collection Cards */}
-                    <CollectionCard
-                      image="/DigitalDreamscape.jpg?height=400&width=400"
-                      name="Digital Dreamscape"
-                      creator="@dream_creator"
-                      price="2.8 ETH"
-                      timeLeft="12h 10m"
-                      bidCount={24}
-                      featured={true}
-                    />
-
-                    <CollectionCard
-                      image="/AbstractRealms.jpg?height=400&width=400"
-                      name="Abstract Realms"
-                      creator="@abstract_mind"
-                      price="3.2 ETH"
-                      timeLeft="2h 45m"
-                      bidCount={15}
-                    />
-
-                    <CollectionCard
-                      image="/NeonGenesis.jpg?height=400&width=400"
-                      name="Neon Genesis"
-                      creator="@neon_artist"
-                      price="5.6 ETH"
-                      timeLeft="4h 30m"
-                      bidCount={32}
-                    />
+                    {auctions.filter(a => !a.ended).length > 0 ? (
+                      auctions
+                        .filter(a => !a.ended)
+                        .map((auction) => (
+                          <CollectionCard
+                            key={auction.auctionId.toString()}
+                            image={`/default-auction.jpg?height=400&width=400`}
+                            name={auction.auctionName}
+                            creator={auction.beneficiary}
+                            price={`${formatEther(auction.highestBid)} ETH`}
+                            timeLeft={getTimeLeft(auction.auctionEndTime)}
+                            bidCount={Number(auction.totalVolumeBid)}
+                            featured={false}
+                            id={auction.auctionId}
+                          />
+                        ))
+                    ) : (
+                      <p className="col-span-full text-center text-gray-500">No active auctions.</p>
+                    )}
                   </div>
                 </Tab>
-                <Tab key="upcoming" title="Upcoming">
+
+                <Tab key="past" title="Past">
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {/* Upcoming Collection Cards */}
-                    <CollectionCard
-                      image="/FutureVisions.jpg?height=400&width=400"
-                      name="Future Visions"
-                      creator="@future_artist"
-                      price="TBD"
-                      timeLeft="Starts in 2d"
-                      bidCount={0}
-                      upcoming={true}
-                    />
-
-                    <CollectionCard
-                      image="/MetaverseMarvels.jpg?height=400&width=400"
-                      name="Metaverse Marvels"
-                      creator="@meta_creator"
-                      price="TBD"
-                      timeLeft="Starts in 5d"
-                      bidCount={0}
-                      upcoming={true}
-                    />
-
-                    <CollectionCard
-                      image="/QuantumArtifacts.jpg?height=400&width=400"
-                      name="Quantum Artifacts"
-                      creator="@quantum_artist"
-                      price="TBD"
-                      timeLeft="Starts in 1d"
-                      bidCount={0}
-                      upcoming={true}
-                    />
+                    {auctions.filter(a => a.ended).length > 0 ? (
+                      auctions
+                        .filter(a => a.ended)
+                        .map((auction) => (
+                          <CollectionCard
+                            key={auction.auctionId.toString()}
+                            image={`/default-auction.jpg?height=400&width=400`}
+                            name={auction.auctionName}
+                            creator={auction.beneficiary}
+                            price={`${formatEther(auction.highestBid)} ETH`}
+                            timeLeft="Ended"
+                            bidCount={Number(auction.totalVolumeBid)}
+                            featured={false}
+                            id={auction.auctionId}
+                          />
+                        ))
+                    ) : (
+                      <p className="col-span-full text-center text-gray-500">No past auctions.</p>
+                    )}
                   </div>
                 </Tab>
               </Tabs>
@@ -312,6 +311,7 @@ interface CollectionCardProps {
   bidCount: number
   featured?: boolean
   upcoming?: boolean
+  id?: string
 }
 
 function CollectionCard({
@@ -323,18 +323,28 @@ function CollectionCard({
   bidCount,
   featured = false,
   upcoming = false,
+  id = "",
 }: CollectionCardProps) {
 
   const placeBid = async () => {
     try {
-      const contract = new ethers.Contract("AUCTION_ADDRESS", abi, await getProvider())
-      const tx = await contract.placeBid({ value: ethers.parseEther("1") })
-      await tx.wait()
-      alert("Bid placed!")
+      const contract = await getContract();
+
+      const auctionId = BigInt(id);
+      const bidAmountEth = "1";
+      const bidAmountWei = parseEther(bidAmountEth);
+
+      const tx = await contract.bid(auctionId, bidAmountWei, {
+        value: bidAmountWei,
+      });
+
+      await tx.wait();
+      toast.success("Bid placed successfully!");
     } catch (err) {
-      console.error(err)
+      console.error("Failed to place bid:", err);
+      toast.error("Failed to place bid.");
     }
-  }
+  };
   return (
     <Card className={`overflow-hidden transition-all hover:shadow-lg ${featured ? "border-primary" : ""}`}>
       <div className="relative">

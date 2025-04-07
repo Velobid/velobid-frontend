@@ -8,156 +8,78 @@ import { Kbd } from "@heroui/kbd"
 import { Trophy } from "lucide-react"
 
 import { SearchIcon } from "@/components/icons";
+import { getContract } from "@/contract/contract"
+import React from "react"
 
 export default function LeaderboardPage() {
   const [tabs, setTabs] = useState("topBidders")
+  const [topPlayersSpend, setTopPlayersSpend] = useState<any[]>([])
+  const [topPlayersBid, setTopPlayersBid] = useState<any[]>([])
+  const [otherPlayersSpend, setOtherPlayersSpend] = useState<any[]>([])
+  const [otherPlayersBid, setOtherPlayersBid] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const topPlayers = [
-    {
-      id: 1,
-      name: "BabyKnight",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "124 ETH",
-      totalBids: "82",
-      totalStats: "42 - 21",
-      winrate: "64%",
-      kda: "1.23",
-      rank: "Challenger",
-    },
-    {
-      id: 2,
-      name: "Rootless",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "102 ETH",
-      totalBids: "58",
-      totalStats: "42 - 21",
-      winrate: "64%",
-      kda: "1.23",
-      rank: "Challenger",
-    },
-    {
-      id: 3,
-      name: "Teodorr2000",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "96 ETH",
-      totalBids: "54",
-      totalStats: "42 - 21",
-      winrate: "64%",
-      kda: "1.23",
-      rank: "Challenger",
-    },
-  ]
+  React.useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
 
-  const leaderboardPlayers = [
-    {
-      id: 4,
-      place: 4,
-      name: "Rens",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "86 ETH",
-      totalBids: "38",
-      totalStats: "42 - 21",
-      winrate: "64%",
-      kda: "1.23",
-      rank: "Challenger",
-    },
-    {
-      id: 5,
-      place: 5,
-      name: "Edwin",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "78 ETH",
-      totalBids: "36",
-      totalStats: "42 - 21",
-      winrate: "64%",
-      kda: "1.23",
-      rank: "Challenger",
-    },
-    {
-      id: 6,
-      place: 6,
-      name: "FlyWithMe",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "74 ETH",
-      totalBids: "32",
-      totalStats: "20 - 21",
-      winrate: "49%",
-      kda: "5.23",
-      rank: "Challenger",
-    },
-    {
-      id: 7,
-      place: 8,
-      name: "BigBob007",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "67 ETH",
-      totalBids: "25",
-      totalStats: "20 - 21",
-      winrate: "49%",
-      kda: "5.23",
-      rank: "Grandmaster",
-    },
-    {
-      id: 8,
-      place: 10,
-      name: "Pudge",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "64 ETH",
-      totalBids: "24",
-      totalStats: "20 - 21",
-      winrate: "49%",
-      kda: "5.23",
-      rank: "Master",
-    },
-    {
-      id: 9,
-      place: 12,
-      name: "n0nameplayer",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "58 ETH",
-      totalBids: "20",
-      totalStats: "12 - 21",
-      winrate: "34%",
-      kda: "1.23",
-      rank: "Master",
-    },
-    {
-      id: 10,
-      place: 12,
-      name: "n0nameplayer",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "52 ETH",
-      totalBids: "17",
-      totalStats: "12 - 21",
-      winrate: "34%",
-      kda: "1.23",
-      rank: "Master",
-    },
-    {
-      id: 11,
-      place: 13,
-      name: "Kimberly Mastrangelo",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "49 ETH",
-      totalBids: "15",
-      totalStats: "12 - 21",
-      winrate: "34%",
-      kda: "1.23",
-      rank: "Gold",
-    },
-    {
-      id: 12,
-      place: 13,
-      name: "Kimberly Mastrangelo",
-      avatar: "/placeholder.svg?height=80&width=80",
-      totalSpends: "45 ETH",
-      totalBids: "12",
-      totalStats: "12 - 21",
-      winrate: "34%",
-      kda: "1.23",
-      rank: "Gold",
-    },
-  ]
+      try {
+        const contract = await getContract()
+        const addresses: string[] = await contract.getUsers(0, 20)
+
+        const biddersData = await Promise.all(
+          addresses.map(async (addr) => {
+            try {
+              const bidCount = await contract.topBidders(addr)
+              const spend = await contract.topSpenders(addr)
+
+              const totalBids = bidCount?.toNumber?.() ?? 0
+              const totalSpends = spend?.toNumber?.() ?? 0
+
+              return {
+                address: addr,
+                name: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+                totalBids,
+                totalSpends,
+              }
+            } catch (err) {
+              console.warn(`Skipping user ${addr} due to error:`, err)
+              return null
+            }
+          })
+        )
+
+        const validData = biddersData.filter(Boolean) as {
+          address: string
+          name: string
+          totalBids: number
+          totalSpends: number
+        }[]
+
+        const topBidders = validData
+          .filter((d) => d.totalBids > 0)
+          .sort((a, b) => b.totalBids - a.totalBids)
+          .slice(0, 20)
+
+        const topSpenders = validData
+          .filter((d) => d.totalSpends > 0)
+          .sort((a, b) => b.totalSpends - a.totalSpends)
+          .slice(0, 20)
+
+        setTopPlayersBid(topBidders.slice(0, 3))
+        setTopPlayersSpend(topSpenders.slice(0, 3))
+        setOtherPlayersBid(topBidders.slice(3))
+        setOtherPlayersSpend(topSpenders.slice(3))
+      } catch (error) {
+        console.error("Failed to fetch leaderboard data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
 
   const container = {
     hidden: { opacity: 0 },
@@ -192,21 +114,30 @@ export default function LeaderboardPage() {
 
           {/* Content */}
           <div className="relative px-6 py-4 mt-24 flex items-center gap-6 z-10">
-            <Avatar className="h-16 w-16 rounded-full ring-2 ring-[#FF6B00]/30">
-              <Avatar src="/placeholder.svg?height=64&width=64" alt="Club" />
-            </Avatar>
+            {topPlayersSpend[0] ? (
+              <>
+                <Avatar className="h-16 w-16 rounded-full ring-2 ring-[#FF6B00]/30">
+                  <Avatar
+                    src="/placeholder.svg?height=64&width=64"
+                    alt={topPlayersSpend[0].name}
+                  />
+                </Avatar>
 
-            <div className="flex-1">
-              <h1 className="text-xl font-bold text-start">John Doe</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 text-start">
-                Top Spender in last auction period.
-              </p>
-            </div>
+                <div className="flex-1">
+                  <h1 className="text-xl font-bold text-start">{topPlayersSpend[0].name}</h1>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 text-start">
+                    Top Spender in last auction period.
+                  </p>
+                </div>
 
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Leaderboard resets in: </span>
-              <span className="text-black dark:text-white">2 1 : 5 2</span>
-            </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Leaderboard resets in:</span>
+                  <span className="text-black dark:text-white">21 : 52</span>
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">No spenders.</div>
+            )}
           </div>
         </div>
 
@@ -240,7 +171,7 @@ export default function LeaderboardPage() {
 
         {/* Top 3 players */}
         <motion.div className="grid grid-cols-3 gap-4 px-6 py-4" variants={container} initial="hidden" animate="show">
-          {topPlayers.map((player, index) => (
+          {(tabs === 'topBidders' ? topPlayersBid : topPlayersSpend).map((player, index) => (
             <motion.div
               key={player.id}
               variants={item}
@@ -263,8 +194,12 @@ export default function LeaderboardPage() {
 
                 <div key={`stats-${player.id}`} className="flex justify-between text-sm">
                   <div className="flex flex-row gap-2 w-full justify-between items-center">
-                    <div className="text-gray-600 dark:text-gray-400">{tabs == 'topBidders' ? 'Total Bids' : 'Total Spends'}</div>
-                    <div className="font-medium mt-1">{tabs == 'topBidders' ? player.totalBids : player.totalSpends}</div>
+                    <div className="text-gray-600 dark:text-gray-400">
+                      {tabs === 'topBidders' ? 'Total Bids' : 'Total Spends'}
+                    </div>
+                    <div className="font-medium mt-1">
+                      {tabs === 'topBidders' ? player.totalBids : player.totalSpends}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -274,59 +209,31 @@ export default function LeaderboardPage() {
 
         {/* Leaderboard table */}
         <div className="px-6 py-6 flex-1 overflow-auto">
-          { tabs == 'topBidders' ? (
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="text-left text-sm">
-                  <th className="pb-3 font-medium w-[10%] text-center">Place</th>
-                  <th className="pb-3 font-medium w-[70%]">Player name</th>
-                  <th className="pb-3 font-medium w-[20%] text-center">Total Bid</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaderboardPlayers.map((player) => (
-                  <motion.tr
-                    key={player.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.05 * (player.place - 3) }}
-                    className="border-t dark:border-[#2A2A2A] hover:bg-slate-50 dark:hover:bg-[#1A1A1A]/50"
-                  >
-                    <td className="py-3 text-sm">{player.place}</td>
-                    <td className="py-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <Avatar name={player.name} />
-                        </Avatar>
-                        <span className="font-medium">{player.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-3">
-                      <div className="text-sm">{player.totalBids}</div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
+          {(tabs === 'topBidders' ? otherPlayersBid : otherPlayersSpend).length === 0 ? (
+            <div className="text-center text-sm text-gray-500 dark:text-gray-400">
+              No data available.
+            </div>
           ) : (
             <table className="w-full border-collapse">
               <thead>
                 <tr className="text-left text-sm">
                   <th className="pb-3 font-medium w-[10%] text-center">Place</th>
                   <th className="pb-3 font-medium w-[70%]">Player name</th>
-                  <th className="pb-3 font-medium w-[20%] text-center">Total Spend</th>
+                  <th className="pb-3 font-medium w-[20%] text-center">
+                    {tabs === 'topBidders' ? 'Total Bid' : 'Total Spend'}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {leaderboardPlayers.map((player) => (
+                {(tabs === 'topBidders' ? otherPlayersBid : otherPlayersSpend).map((player, index) => (
                   <motion.tr
                     key={player.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.05 * (player.place - 3) }}
+                    transition={{ delay: 0.05 * index }}
                     className="border-t dark:border-[#2A2A2A] hover:bg-slate-50 dark:hover:bg-[#1A1A1A]/50"
                   >
-                    <td className="py-3 text-sm">{player.place}</td>
+                    <td className="py-3 text-sm text-center">{index + 4}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
@@ -335,8 +242,8 @@ export default function LeaderboardPage() {
                         <span className="font-medium">{player.name}</span>
                       </div>
                     </td>
-                    <td className="py-3">
-                      <div className="text-sm">{player.totalSpends}</div>
+                    <td className="py-3 text-center text-sm">
+                      {tabs === 'topBidders' ? player.totalBids : player.totalSpends}
                     </td>
                   </motion.tr>
                 ))}
