@@ -8,7 +8,7 @@ import { Kbd } from "@heroui/kbd"
 import { Trophy } from "lucide-react"
 
 import { SearchIcon } from "@/components/icons";
-import { getContract } from "@/contract/contract"
+import { getContract, getSigner } from "@/contract/contract"
 import React from "react"
 
 export default function LeaderboardPage() {
