@@ -8,11 +8,9 @@ import {
     base,
 } from 'wagmi/chains';
 
-const WagmiConfig = getDefaultConfig({
+export const wagmiConfig = getDefaultConfig({
   appName: 'My RainbowKit App',
   projectId: '4f48723d8327495fccfe00d1dca96bab',
   chains: [mainnet, polygon, optimism, arbitrum, base, sepolia],
   ssr: true, // If your dApp uses server side rendering (SSR)
 });
-
-export default WagmiConfig
