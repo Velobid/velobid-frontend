@@ -51,9 +51,13 @@ export default function Dashboard() {
   }
 
   // Ensure dark mode is applied on initial render
-  useState(() => {
-    document.documentElement.classList.add("dark")
-  })
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme")
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark")
+      setTheme("dark")
+    }
+  }, [])
 
   const [overview, setOverview] = useState({
     activeAuctions: 0,
