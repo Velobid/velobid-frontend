@@ -47,7 +47,8 @@ const CustomButton = ({ children, onClick, variant = 'flat' }: {
 );
 
 export function WalletComponents() {
-  return <ConnectButtonWalletComponents />;
+  // return <ConnectButtonWalletComponents />;
+  return <ConnectButtonWalletByRainbowKit />;
 }
 
 export const ConnectButtonWalletComponents = () => {
@@ -115,3 +116,9 @@ export const ConnectButtonWalletComponents = () => {
     </ConnectButton.Custom>
   );
 };
+
+export const ConnectButtonWalletByRainbowKit = () => {
+  return (
+    <ConnectButton />
+  )
+}
